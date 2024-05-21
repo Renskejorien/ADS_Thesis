@@ -1,12 +1,12 @@
 from platypus import Problem, Real, Hypervolume
 from pyborg import BorgMOEA
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from sys import *
 from math import *
 from scipy.optimize import root
-import scipy.stats as ss
+import time
+import datetime
  
 # Lake Parameters
 b = 0.42
@@ -52,18 +52,16 @@ def LakeProblemDPS(*vars):
     def pCrit(x):
         return [(x[0]**q) / (1 + x[0]**q) - b * x[0]]
 
-    # sol = root(pCrit, 0.5)
-    # critical_threshold = sol.x
+    sol = root(pCrit, 0.5)
+    critical_threshold = sol.x
 
     # Initialize arrays
     average_annual_P = np.zeros([nYears])
-    # discounted_benefit = np.zeros([nSamples])
+    discounted_benefit = np.zeros([nSamples])
     # yrs_inertia_met = np.zeros([nSamples])
-    # yrs_Pcrit_met = np.zeros([nSamples])
+    yrs_Pcrit_met = np.zeros([nSamples])
     lake_state = np.zeros([nYears + 1])
     objs = [0.0] * nobjs
-    # constrs = [0.0] * nconstrs
-    reliability = 0.0
 
     # Generate nSamples of nYears of natural phosphorus inflows
     natFlow = np.zeros([nSamples, nYears])
@@ -101,24 +99,22 @@ def LakeProblemDPS(*vars):
         for i in range(nYears):
             lake_state[i + 1] = lake_state[i] * (1 - b) + (lake_state[i]**q) / (1 + (lake_state[i]**q)) + Y[i] + natFlow[s, i]
             average_annual_P[i] = average_annual_P[i] + lake_state[i + 1] / nSamples
-            # discounted_benefit[s] = discounted_benefit[s] + alpha * Y[i] * delta**i
+            discounted_benefit[s] = discounted_benefit[s] + alpha * Y[i] * delta**i
 
             # if i >= 1 and ((Y[i] - Y[i - 1]) > inertia_threshold):
             #     yrs_inertia_met[s] = yrs_inertia_met[s] + 1
 
-            # if lake_state[i + 1] < critical_threshold:
-            #     yrs_Pcrit_met[s] = yrs_Pcrit_met[s] + 1
+            if lake_state[i + 1] < critical_threshold:
+                yrs_Pcrit_met[s] = yrs_Pcrit_met[s] + 1
 
             if i < (nYears - 1):
                 Y[i + 1] = RBFpolicy(lake_state[i + 1], C, R, newW)
-        reliability += np.sum(lake_state < root(pCrit, 0.5).x) / float(nSamples*nvars)
 
     # Calculate minimization objectives
     objs[0] = np.max(average_annual_P)  # average annual P concentration
-    objs[1] = -1 * (np.sum(delta * (alpha * Y[0] - b * average_annual_P**2))) # utility
-    objs[2] = reliability  # reliability
+    objs[1] = -1 * np.sum(discounted_benefit) / nsamples # utility
+    objs[2] = -1 * np.sum(yrs_pCrit_met) / (nYears * nSamples) # average reliability 
 
-    # constrs[0] = max(0.0, reliability_threshold - (-1 * objs[2]))
     return objs
 
 # define the problem
@@ -169,25 +165,27 @@ def detailed_run(algorithm, maxevals, frequency, file):
     # close the runtime file
     f.close()
 
-    def runtime_hypervolume(algorithm):
-        '''
-        Calculate the hypervolume at a given frequency and build data
-        arrays to plot.
-        '''
-        global last_calc
-        if (algorithm.nfe >= last_calc + frequency):
-            last_calc = algorithm.nfe
-            nfe.append(last_calc)
-            # use Platypus hypervolume indicator on the current archive
-            result = hv.calculate(algorithm.archive[:])
-            hyp.append(result)
+def runtime_hypervolume(algorithm):
+    '''
+    Calculate the hypervolume at a given frequency and build data
+    arrays to plot.
+    '''
+    global last_calc
+    if (algorithm.nfe >= last_calc + frequency):
+        last_calc = algorithm.nfe
+        nfe.append(last_calc)
+        # use Platypus hypervolume indicator on the current archive
+        result = hv.calculate(algorithm.archive[:])
+        hyp.append(result)
 
-# define detailed_run parameters
-maxevals = 10000
-frequency = 100
-hv = Hypervolume(minimum=[-6000, 0, 0], maximum=[0, 1, 100])
-nfe, hyp = detailed_run(algorithm, maxevals = 100, frequency = 100, "city1.data", callback = runtime_hypervolume)
- 
+# Define detailed_run parameters
+maxevals = 100 
+frequency = 5000 
+hv = Hypervolume(minimum=[-1, 0, 0], maximum=[0, 3, 1]) 
+
+# Run the algorithm
+nfe, hyp = detailed_run(algorithm, maxevals, frequency, "city1.data", callback = runtime_hypervolume)
+
 # plot the results using matplotlib 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
