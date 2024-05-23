@@ -7,6 +7,7 @@ from math import *
 from scipy.optimize import root
 import time
 import datetime
+import os 
  
 # Lake Parameters
 b = 0.42
@@ -175,12 +176,16 @@ def detailed_run(algorithm, maxevals, frequency, file, hv):
     return nfe, hyp
 
 # Define detailed_run parameters
-maxevals = 50000 
+maxevals = 1000 
 frequency = 5000 
 hv = Hypervolume(minimum=[-1, 0, -1], maximum=[0, 3, 0]) 
 
 # Run the algorithm
 nfe, hyp = detailed_run(algorithm, maxevals, frequency, "city1.data", hv)
+
+# Save the algorithm output
+output = [[s.objectives[0], s.objectives[1], s.objectives[2]] for s in algorithm.result]
+np.savetxt('/Users/renskedeleeuw/PyBorg-master/1city.csv', output, delimiter=',')
 
 # plot the results using matplotlib 
 fig = plt.figure()
