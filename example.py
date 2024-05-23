@@ -108,12 +108,12 @@ def LakeProblemDPS(*vars):
                 yrs_Pcrit_met[s] = yrs_Pcrit_met[s] + 1
 
             if i < (nYears - 1):
-                Y[i + 1] = RBFpolicy(lake_state[i + 1], C, R, newW)
+                Y[i + 1] = RBFpolicy(lake_state[i + 1], C, R, normalize_W(W))
 
     # Calculate minimization objectives
     objs[0] = np.max(average_annual_P)  # average annual P concentration
-    objs[1] = -1 * np.sum(discounted_benefit) / nsamples # utility
-    objs[2] = -1 * np.sum(yrs_pCrit_met) / (nYears * nSamples) # average reliability 
+    objs[1] = -1 * np.sum(discounted_benefit) / nSamples # utility
+    objs[2] = -1 * np.sum(yrs_Pcrit_met) / (nYears * nSamples) # average reliability 
 
     return objs
 
@@ -128,8 +128,12 @@ problem.function = LakeProblemDPS
 algorithm = BorgMOEA(problem, epsilons = [0.01, 0.01, 0.0001])
 # algorithm.run(10000)
 
-def detailed_run(algorithm, maxevals, frequency, file):
-    ''' Output runtime data for an algorithm run into a format readable by 
+nfe = []
+hyp = []
+front = []
+
+def detailed_run(algorithm, maxevals, frequency, file, hv):
+    ''' Output runtime data for an algorithm run into a format readable by
     the MOEAFramework library'''
 
     # open file and set up header
@@ -151,7 +155,8 @@ def detailed_run(algorithm, maxevals, frequency, file):
         # print to file if necessary
         if (algorithm.nfe >= last_log + frequency):
             last_log = algorithm.nfe
-            f.write("#\n//ElapsedTime=" + str(datetime.timedelta(seconds=time.time()-start_time)))
+            f.write("#\n//ElapsedTime=" +
+                    str(datetime.timedelta(seconds=time.time()-start_time)))
             f.write("\n//NFE=" + str(algorithm.nfe) + "\n")
             arch = algorithm.archive[:]
             for i in range(len(arch)):
@@ -161,30 +166,21 @@ def detailed_run(algorithm, maxevals, frequency, file):
                 for j in range(nobjs):
                     f.write(str(sol.objectives[j]) + " ")
                 f.write("\n")
-
+            nfe.append(last_log)
+            # use Platypus hypervolume indicator on the current archive
+            result = hv.calculate(algorithm.archive[:])
+            hyp.append(result)
     # close the runtime file
     f.close()
-
-def runtime_hypervolume(algorithm):
-    '''
-    Calculate the hypervolume at a given frequency and build data
-    arrays to plot.
-    '''
-    global last_calc
-    if (algorithm.nfe >= last_calc + frequency):
-        last_calc = algorithm.nfe
-        nfe.append(last_calc)
-        # use Platypus hypervolume indicator on the current archive
-        result = hv.calculate(algorithm.archive[:])
-        hyp.append(result)
+    return nfe, hyp
 
 # Define detailed_run parameters
-maxevals = 100 
+maxevals = 50000 
 frequency = 5000 
-hv = Hypervolume(minimum=[-1, 0, 0], maximum=[0, 3, 1]) 
+hv = Hypervolume(minimum=[-1, 0, -1], maximum=[0, 3, 0]) 
 
 # Run the algorithm
-nfe, hyp = detailed_run(algorithm, maxevals, frequency, "city1.data", callback = runtime_hypervolume)
+nfe, hyp = detailed_run(algorithm, maxevals, frequency, "city1.data", hv)
 
 # plot the results using matplotlib 
 fig = plt.figure()
