@@ -5,9 +5,7 @@ import numpy as np
 from sys import *
 from math import *
 from scipy.optimize import root
-import time
-import datetime
-import os 
+import pandas as pd
  
 # Lake Parameters
 b = 0.42
@@ -20,15 +18,15 @@ sigma = 0.001
 # Economic Benefit Parameters
 alpha = 0.4 
 delta = 0.98
+beta = 0.08
 
-# Set the number of RBFs (n), decision variables, objectives and constraints
+# Set the number of cities, decision variables and objectives
 nCities = 1
 nvars = 9 * nCities
 nobjs = 3
 nYears = 100
 nSamples = 100
 nSeeds = 2
-nconstrs = 1
 
 # Set Thresholds
 reliability_threshold = 0.85
@@ -43,9 +41,9 @@ def RBFpolicy(lake_state, C, R, W):
             Y = Y + W[i] * ((np.absolute(lake_state - C[i]) / R[i])**3)
 
     Y = min(0.1, max(Y, 0.01))
-
     return Y
 
+# Define the shallow lake model
 def LakeProblemDPS(*vars):
     seed = 1234
 
@@ -125,67 +123,41 @@ problem.types[1::3] = Real(0, 2)
 problem.types[2::3] = Real(0, 1)
 problem.function = LakeProblemDPS
  
-# define and run the Borg algorithm for 10000 evaluations
+# define the Borg algorithm
 algorithm = BorgMOEA(problem, epsilons = [0.01, 0.01, 0.0001])
-# algorithm.run(10000)
 
 nfe = []
 hyp = []
-front = []
 
-def detailed_run(algorithm, maxevals, frequency, file, hv):
-    ''' Output runtime data for an algorithm run into a format readable by
-    the MOEAFramework library'''
-
-    # open file and set up header
-    f = open(file, "w+")
-    f.write("# Variables = " + str(algorithm.problem.nvars))
-    f.write("\n# Objectives = " + str(algorithm.problem.nobjs) + "\n")
-
-    start_time = time.time()
+# Find the hypervolume for the number of function evaluations
+def detailed_run(algorithm, maxevals, frequency, hv):
     last_log = 0
 
-    nvars = algorithm.problem.nvars
-    nobjs = algorithm.problem.nobjs
-
-    # run the algorithm/problem for specified number of function evaluations
     while (algorithm.nfe <= maxevals):
-        # step the algorithm
         algorithm.step()
 
-        # print to file if necessary
         if (algorithm.nfe >= last_log + frequency):
             last_log = algorithm.nfe
-            f.write("#\n//ElapsedTime=" +
-                    str(datetime.timedelta(seconds=time.time()-start_time)))
-            f.write("\n//NFE=" + str(algorithm.nfe) + "\n")
-            arch = algorithm.archive[:]
-            for i in range(len(arch)):
-                sol = arch[i]
-                for j in range(nvars):
-                    f.write(str(sol.variables[j]) + " ")
-                for j in range(nobjs):
-                    f.write(str(sol.objectives[j]) + " ")
-                f.write("\n")
-            nfe.append(last_log)
-            # use Platypus hypervolume indicator on the current archive
+            nfe.append(algorithm.nfe)
+            
             result = hv.calculate(algorithm.archive[:])
             hyp.append(result)
-    # close the runtime file
-    f.close()
     return nfe, hyp
 
 # Define detailed_run parameters
-maxevals = 1000 
-frequency = 5000 
-hv = Hypervolume(minimum=[-1, 0, -1], maximum=[0, 3, 0]) 
+maxevals = 1000
+frequency = 10 
+hv = Hypervolume(minimum=[0, -2, -1], maximum=[3, 0, 0]) # experiment with this
 
 # Run the algorithm
-nfe, hyp = detailed_run(algorithm, maxevals, frequency, "city1.data", hv)
+nfe, hyp = detailed_run(algorithm, maxevals, frequency, hv)
 
-# Save the algorithm output
-output = [[s.objectives[0], s.objectives[1], s.objectives[2]] for s in algorithm.result]
-np.savetxt('/Users/renskedeleeuw/PyBorg-master/1city.csv', output, delimiter=',')
+# Save the algorithm output as csv files
+output = [[s.objectives[0], s.objectives[1], s.objectives[2],
+           s.variables[0::3], s.variables[1::3], s.variables[2::3]] for s in algorithm.result]
+col_names = ['Maximum Phosphorus', 'Utility', 'Reliability','C', 'R', 'W']
+df = pd.DataFrame(output, columns=col_names)
+df.to_csv('City1.csv', sep=',', index=False)
 
 # plot the results using matplotlib 
 fig = plt.figure()
