@@ -18,7 +18,6 @@ sigma = 0.001
 # Economic Benefit Parameters
 alpha = 0.4 
 delta = 0.98
-beta = 0.08
 
 # Set the number of cities, decision variables and objectives
 nCities = 1
@@ -57,7 +56,6 @@ def LakeProblemDPS(*vars):
     # Initialize arrays
     average_annual_P = np.zeros([nYears])
     discounted_benefit = np.zeros([nSamples])
-    # yrs_inertia_met = np.zeros([nSamples])
     yrs_Pcrit_met = np.zeros([nSamples])
     lake_state = np.zeros([nYears + 1])
     objs = [0.0] * nobjs
@@ -94,14 +92,11 @@ def LakeProblemDPS(*vars):
         Y = np.zeros([nYears])
         
         Y[0] = RBFpolicy(lake_state[0], C, R, normalize_W(W))
-
+        
         for i in range(nYears):
             lake_state[i + 1] = lake_state[i] * (1 - b) + (lake_state[i]**q) / (1 + (lake_state[i]**q)) + Y[i] + natFlow[s, i]
             average_annual_P[i] = average_annual_P[i] + lake_state[i + 1] / nSamples
             discounted_benefit[s] = discounted_benefit[s] + alpha * Y[i] * delta**i
-
-            # if i >= 1 and ((Y[i] - Y[i - 1]) > inertia_threshold):
-            #     yrs_inertia_met[s] = yrs_inertia_met[s] + 1
 
             if lake_state[i + 1] < critical_threshold:
                 yrs_Pcrit_met[s] = yrs_Pcrit_met[s] + 1
@@ -116,14 +111,14 @@ def LakeProblemDPS(*vars):
 
     return objs
 
-# define the problem
+# Define the problem
 problem = Problem(nvars, nobjs)
 problem.types[0::3] = Real(-2, 2)
 problem.types[1::3] = Real(0, 2)
 problem.types[2::3] = Real(0, 1)
 problem.function = LakeProblemDPS
  
-# define the Borg algorithm
+# Define the Borg algorithm
 algorithm = BorgMOEA(problem, epsilons = [0.01, 0.01, 0.0001])
 
 nfe = []
@@ -145,9 +140,9 @@ def detailed_run(algorithm, maxevals, frequency, hv):
     return nfe, hyp
 
 # Define detailed_run parameters
-maxevals = 1000
-frequency = 10 
-hv = Hypervolume(minimum=[0, -2, -1], maximum=[3, 0, 0]) # experiment with this
+maxevals = 50000
+frequency = 1000
+hv = Hypervolume(minimum=[0, -2, -1], maximum=[3, 0, 0])
 
 # Run the algorithm
 nfe, hyp = detailed_run(algorithm, maxevals, frequency, hv)

@@ -12,13 +12,12 @@ b = 0.42
 q = 2.0
 
 # Natural Inflow Parameters
-mu = 0.03
-sigma = np.sqrt(10**-5)
+mu = 0.02
+sigma = 0.001
 
 # Economic Benefit Parameters
 alpha = 0.4 
 delta = 0.98
-beta = 0.08
 
 # Set the number of cities, decision variables and objectives
 nCities = 2
@@ -57,8 +56,8 @@ def LakeProblemDPS(*vars):
 
     # Initialize arrays
     average_annual_P = np.zeros([nYears])
-    discounted_benefit = np.zeros([nSamples])
-    # yrs_inertia_met = np.zeros([nSamples])
+    discounted_benefit_1 = np.zeros([nSamples])
+    discounted_benefit_2 = np.zeros([nSamples])
     yrs_Pcrit_met = np.zeros([nSamples])
     lake_state = np.zeros([nYears + 1])
     objs = [0.0] * nobjs
@@ -105,10 +104,8 @@ def LakeProblemDPS(*vars):
             lake_state[i + 1] = lake_state[i] * (1 - b) + (
                 lake_state[i]**q) / (1 + (lake_state[i]**q)) + Y1[i] + Y2[i] + natFlow[s, i]
             average_annual_P[i] = average_annual_P[i] + lake_state[i + 1] / nSamples
-            discounted_benefit[s] = discounted_benefit[s] + alpha * Y1[i] * delta**i + alpha * Y2[i] * delta**i
-
-            # if i >= 1 and (((Y1[i] - Y1[i - 1]) + (Y2[i] - Y2[i - 1])) > inertia_threshold):
-            #     yrs_inertia_met[s] = yrs_inertia_met[s] + 1
+            discounted_benefit_1[s] = discounted_benefit_1[s] + alpha * Y1[i] * delta**i
+            discounted_benefit_2[s] = discounted_benefit_2[s] + alpha * Y2[i] * delta**i
 
             if lake_state[i + 1] < critical_threshold:
                 yrs_Pcrit_met[s] = yrs_Pcrit_met[s] + 1
@@ -117,11 +114,11 @@ def LakeProblemDPS(*vars):
                 Y1[i + 1] = RBFpolicy(lake_state[i + 1], C1, R1, normalize_W(W1))
                 Y2[i + 1] = RBFpolicy(lake_state[i + 1], C2, R2, normalize_W(W2))
 
-    # Calculate minimization objectives (defined in comments at beginning of file)
-    objs[0] = np.max(average_annual_P)  #minimize the max average annual P concentration
-    objs[1] = -1 * np.sum(discounted_benefit) / nSamples #utility1
-    objs[2] = -1 * np.sum(discounted_benefit) / nSamples #utility2
-    objs[3] = -1 * np.sum(yrs_Pcrit_met) / (nYears * nSamples) #reliability
+    # Calculate minimization objectives
+    objs[0] = np.max(average_annual_P)  # minimize the max average annual P concentration
+    objs[1] = -1 * np.sum(discounted_benefit_1) / nSamples # utility1
+    objs[2] = -1 * np.sum(discounted_benefit_2) / nSamples # utility2
+    objs[3] = -1 * np.sum(yrs_Pcrit_met) / (nYears * nSamples) # average reliability
 
     return objs
 
@@ -157,20 +154,20 @@ def detailed_run(algorithm, maxevals, frequency, hv):
     return nfe, hyp
 
 # Define detailed_run parameters
-maxevals = 1000
-frequency = 10 
-hv = Hypervolume(minimum=[0, -2, -1], maximum=[3, 0, 0]) # experiment with this
+maxevals = 50000
+frequency = 1000 
+hv = Hypervolume(minimum=[0, -2, -2, -1], maximum=[3, 0, 0, 0]) # experiment with this
 
 # Run the algorithm
 nfe, hyp = detailed_run(algorithm, maxevals, frequency, hv)
 
 # Save the algorithm output as csv files
-output = [[s.objectives[0], s.objectives[1], s.objectives[2],
+output = [[s.objectives[0], s.objectives[1], s.objectives[2], s.objectives[3],
            s.variables[0::6], s.variables[1::6], s.variables[2::6],
            s.variables[3::6], s.variables[4::6], s.variables[5::6]] for s in algorithm.result]
-col_names = ['Maximum Phosphorus', 'Utility', 'Reliability','C', 'R', 'W']
+col_names = ['Maximum Phosphorus', 'Utility1', 'Utility2', 'Reliability','C1', 'R1', 'W1','C2', 'R2', 'W2']
 df = pd.DataFrame(output, columns=col_names)
-df.to_csv('City1.csv', sep=',', index=False)
+df.to_csv('City2.csv', sep=',', index=False)
  
 # plot the results using matplotlib 
 fig = plt.figure()
@@ -181,4 +178,10 @@ ax.scatter([s.objectives[0] for s in algorithm.result],
 ax.set_xlabel('Objective 1')
 ax.set_ylabel('Objective 2')
 ax.set_zlabel('Objective 3')
+plt.show()
+
+plt.plot(nfe, hyp)
+plt.title('PyBorg Runtime Hypervolume 1 City')
+plt.xlabel('Number of Function Evaluations')
+plt.ylabel('Hypervolume')
 plt.show()
