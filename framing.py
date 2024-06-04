@@ -4,16 +4,25 @@ import numpy as np
 import pandas as pd
 
 # Import data
-df2 = pd.read_csv('City2.csv', sep=',')
-df2 = df2[df2['Reliability'] <= -0.3]
+df4 = pd.read_csv('City2.csv', sep=',')
+df2 = df4[df4['Reliability'] >= 0.85]
+df5 = df4[df4['Reliability'] >= 0.95]
+df6 = df4[df4['Reliability'] >= 0.99]
 df3 = pd.read_csv('City3.csv', sep=',')
 df3 = df3[df3['Reliability'] <= -0.3]
 
+print(df5.head())
 # Set ideal and anti-ideal values for each city
-ideal2 = [min(df2['Utility1']), min(df2['Utility2'])]
-antiideal2 = [max(df2['Utility1']), max(df2['Utility2'])]
-ideal3 = [min(df3['Utility 1']), min(df3['Utility 2']), min(df3['Utility 3'])]
-antiideal3 = [max(df3['Utility 1']), max(df3['Utility 2']), max(df3['Utility 3'])]
+ideal2 = [max(df2['Utility1']), max(df2['Utility2'])]
+ideal4 = [max(df4['Utility1']), max(df4['Utility2']), max(df4['normalized_reliability'])]
+ideal3 = [max(df3['Utility 1']), max(df3['Utility 2']), max(df3['Utility 3'])]
+
+# Utilitarian
+def utilitarian(df):
+    U_solutions = df['Utility1'] + df['Utility2']
+    U = max(U_solutions)
+    Uindex = np.argmax(U_solutions)
+    return U, Uindex
 
 # Least Squares
 def least_squares(df, ideal, nNegs, nSols, weight):
@@ -47,22 +56,6 @@ def minimax(df, ideal, nNegs, nSols, weight):
     MINIMAXindex = np.argmin(MM)
     return MINIMAX, MINIMAXindex
 
-
-# Compromise Programming
-def compromise_programming(df, ideal, nNegs, nSols, weight, p, antiideal):
-    CP_solutions = []
-    for i in nNegs: 
-        lp = 0
-        neg = 0
-        for j in nSols:
-            lp += weight * abs((ideal[neg] - df[i].iloc[j]) / (ideal[neg] - antiideal[neg]) ** p)
-        CP_solutions.append(lp ** (1 / p))
-        neg += 1
-    CP = min(CP_solutions)
-    CPindex = np.argmin(CP_solutions)
-    return CP, CPindex
-
-
 # Power index
 def normalize_power(p):
     normalized = np.zeros(len(p))
@@ -87,16 +80,94 @@ def power_index(df, ideal, nNegs, nSols, weight):
     PIindex = np.argmax(np.sum(PI, axis=0))
     return PIsum, PIindex
 
+def fallback_bargaining(df, i, j, k):
+	# solution numbers for indexing
+	sol_nums = df.iloc[:, 1]
 
+	# sort solutions by satisficing for each utility, largest to smallest
+	U1_sorted = np.argsort(df.iloc[:, i])[::-1]
+	U2_sorted = np.argsort(df.iloc[:, j])[::-1]
+	if k > 0:
+		R_sorted = np.argsort(df.iloc[:, k])[::-1]
+
+	# rank solutions for each variable
+	U1_ranking = U1_sorted[sol_nums]
+	U2_ranking = U2_sorted[sol_nums]
+	if k > 0:
+		R_ranking = R_sorted[sol_nums]
+
+	# initialize proposals
+	U1_proposed = np.array([])
+	U2_proposed = np.array([])
+	if k > 0:
+		R_proposed = np.array([])
+
+	compromise = np.array([])
+	l = 0
+
+	# perform fallback bargaining
+	while len(compromise) < 1:
+		if l in sol_nums:
+			# get the ith preference of each utility
+			U1_proposed = np.append(U1_proposed, U1_ranking[l])
+			U2_proposed = np.append(U2_proposed, U2_ranking[l])
+			if k > 0:
+				R_proposed = np.append(R_proposed, R_ranking[l])
+
+			# check to see if there is a common solution across utilities
+			U_intersect = np.intersect1d(U1_proposed, U2_proposed)
+			if len(U_intersect) > 0:
+				if k > 0:
+					compromise = np.intersect1d(U_intersect, R_proposed)
+					if len(compromise) > 0:
+						return compromise[0]
+				else: 
+					if len(U_intersect) > 0:
+						return U_intersect[0]
+		l += 1
+
+          
 # Set parameters for 2 cities
-nNegs2 = df2.columns[0:2]
+nNegs2 = df2.columns[1:3]
 nSols2 = range(len(df2.index))
 weight = 1
 
-print('LS 2 cities: ', least_squares(df2, ideal2, nNegs2, nSols2, weight))
-print('MM 2 cities: ', minimax(df2, ideal2, nNegs2, nSols2, weight))
-print('CP 2 cities: ', compromise_programming(df2, ideal2, nNegs2, nSols2, weight, p=1, antiideal=antiideal2))
-print('PI 2 cities: ', power_index(df2, ideal2, nNegs2, nSols2, weight))
+print('U 2 cities R85: ', utilitarian(df2))
+print('LS 2 cities R85: ', least_squares(df2, ideal2, nNegs2, nSols2, weight))
+print('MM 2 cities R85: ', minimax(df2, ideal2, nNegs2, nSols2, weight))
+print('PI 2 cities R85: ', power_index(df2, ideal2, nNegs2, nSols2, weight))
+print('FB 2 city R85: ', fallback_bargaining(df2, 3, 4, 0))
+
+print('\n')
+
+nSols5 = range(len(df5.index))
+print('U 2 cities R95: ', utilitarian(df5))
+print('LS 2 cities R95: ', least_squares(df5, ideal2, nNegs2, nSols5, weight))
+print('MM 2 cities R95: ', minimax(df5, ideal2, nNegs2, nSols5, weight))
+print('PI 2 cities R95: ', power_index(df5, ideal2, nNegs2, nSols5, weight))
+print('FB 2 city R95: ', fallback_bargaining(df5, 3, 4, 0))
+
+print('\n')
+
+nSols6 = range(len(df6.index))
+print('U 2 cities R99: ', utilitarian(df6))
+print('LS 2 cities R99: ', least_squares(df6, ideal2, nNegs2, nSols6, weight))
+print('MM 2 cities R99: ', minimax(df6, ideal2, nNegs2, nSols6, weight))
+print('PI 2 cities R99: ', power_index(df6, ideal2, nNegs2, nSols6, weight))
+print('FB 2 city R99: ', fallback_bargaining(df6, 3, 4, 0))
+
+print('\n')
+
+# Set parameters for 2 cities with reliability as a third party
+nNegs2r = ["Utility1", "Utility2", "normalized_reliability"]
+nSols2r = range(len(df4.index))
+weight = 1
+
+print('U 2 cities + reliability: ', utilitarian(df4))
+print('LS 2 cities + reliability: ', least_squares(df4, ideal2, nNegs2r, nSols2r, weight))
+print('MM 2 cities + reliability: ', minimax(df4, ideal2, nNegs2r, nSols2r, weight))
+print('PI 2 cities + reliability: ', power_index(df4, ideal2, nNegs2r, nSols2r, weight))
+print('FB 2 city + reliability: ', fallback_bargaining(df4, 3, 4, 6))
 
 print('\n')
 
@@ -107,5 +178,4 @@ weight = 1
 
 print('LS 3 cities: ', least_squares(df3, ideal3, nNegs3, nSols3, weight))
 print('MM 3 cities: ', minimax(df3, ideal3, nNegs3, nSols3, weight))
-print('CP 3 cities: ', compromise_programming(df3, ideal3, nNegs3, nSols3, weight, p=1, antiideal=antiideal3))
 print('PI 3 cities: ', power_index(df3, ideal3, nNegs3, nSols3, weight))
